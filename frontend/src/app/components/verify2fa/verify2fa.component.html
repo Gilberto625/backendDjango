@@ -1,0 +1,45 @@
+<div class="verify-container">
+  <mat-card class="verify-card">
+    <mat-card-header>
+      <mat-card-title>Verificación 2FA</mat-card-title>
+      <mat-card-subtitle>
+        {{ type === 'register' ? 'Confirma tu registro' : 'Confirma tu identidad' }}
+      </mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+      <p class="info-text">
+        Hemos enviado un código de 6 dígitos a: <strong>{{ destination }}</strong>
+      </p>
+      <p class="warning-text">
+        El código expira en 5 minutos
+      </p>
+
+      <form [formGroup]="verifyForm" (ngSubmit)="onSubmit()">
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Código de 6 dígitos</mat-label>
+            <input matInput formControlName="codigo" placeholder="123456" maxlength="6" autocomplete="off">
+            <mat-error *ngIf="verifyForm.get('codigo')?.hasError('required')">
+              El código es obligatorio
+            </mat-error>
+            <mat-error *ngIf="verifyForm.get('codigo')?.hasError('pattern')">
+              Debe ser un código de 6 dígitos
+            </mat-error>
+          </mat-form-field>
+        </div>
+
+        <div class="form-actions">
+          <button mat-raised-button color="primary" type="submit" [disabled]="loading" class="submit-button">
+            <span *ngIf="!loading">Verificar Código</span>
+            <mat-spinner *ngIf="loading" diameter="20"></mat-spinner>
+          </button>
+        </div>
+
+        <div class="back-link">
+          <a routerLink="/login">← Volver al inicio de sesión</a>
+        </div>
+      </form>
+    </mat-card-content>
+  </mat-card>
+</div>
