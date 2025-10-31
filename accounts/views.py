@@ -297,6 +297,15 @@ def google_login(request):
         })
 
     except Exception as e:
+        # DEBUG: Mostrar el error completo en consola
+        print("=" * 80)
+        print("ERROR EN GOOGLE LOGIN:")
+        print(f"Tipo de error: {type(e).__name__}")
+        print(f"Mensaje de error: {str(e)}")
+        import traceback
+        print("Traceback completo:")
+        traceback.print_exc()
+        print("=" * 80)
         return JsonResponse({'error': f'Token de Google inválido: {str(e)}'}, status=401)
 @csrf_exempt
 def recuperar_contrasena(request):
