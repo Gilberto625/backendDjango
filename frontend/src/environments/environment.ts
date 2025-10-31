@@ -3,13 +3,13 @@ export const environment = {
   production: false,
   apiUrl: 'http://localhost:8000/api/usuarios',
 
-  // Configuración de Firebase (reemplaza con tus credenciales)
+  // Configuración de Firebase
   firebase: {
-    apiKey: "TU_API_KEY",
-    authDomain: "TU_AUTH_DOMAIN",
-    projectId: "TU_PROJECT_ID",
-    storageBucket: "TU_STORAGE_BUCKET",
-    messagingSenderId: "TU_MESSAGING_SENDER_ID",
-    appId: "TU_APP_ID"
+    apiKey: "AIzaSyAJ0Om_GyOwpAgJoaQc7g1oplyGx7g70LQ",
+    authDomain: "auth-backend-tu-nombre.firebaseapp.com",
+    projectId: "auth-backend-tu-nombre",
+    storageBucket: "auth-backend-tu-nombre.firebasestorage.app",
+    messagingSenderId: "370925550099",
+    appId: "1:370925550099:web:ebfdea93f12c7b01435de6"
   }
 };
