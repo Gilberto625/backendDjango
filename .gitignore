@@ -1,0 +1,41 @@
+# Python
+*.py[cod]
+__pycache__/
+*.so
+*.egg
+*.egg-info
+dist/
+build/
+
+# Django
+*.log
+db.sqlite3
+db.sqlite3-journal
+/media
+/static
+*.pot
+
+# Entornos virtuales
+venv/
+env/
+ENV/
+.venv
+
+# Variables de entorno
+.env
+.env.local
+
+# Firebase credentials
+config/firebase-service-account.json
+config/firebase_credentials.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

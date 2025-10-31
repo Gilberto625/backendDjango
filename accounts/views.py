@@ -6,7 +6,8 @@ from django.contrib.auth import get_user_model
 from django.core.mail import send_mail
 from django.conf import settings
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from django.middleware.csrf import get_token
 import json
 import datetime
 from django.contrib.auth.hashers import check_password
@@ -14,6 +15,13 @@ Usuario = get_user_model()
 
 def generar_codigo():
     return str(random.randint(100000, 999999))
+
+@ensure_csrf_cookie
+def get_csrf_token(request):
+    """
+    Endpoint para que Angular obtenga el CSRF token
+    """
+    return JsonResponse({'csrfToken': get_token(request)})
 
 @csrf_exempt
 def register_user(request):
@@ -57,7 +65,12 @@ def register_user(request):
     # Generar y enviar código 2FA
     codigo = generar_codigo()
     temp_token = str(uuid.uuid4())
-    request.session[temp_token] = {'email': data['correo'], 'codigo': codigo, 'intentos': 0}
+    request.session[temp_token] = {
+        'email': data['correo'],
+        'codigo': codigo,
+        'intentos': 0,
+        'expira': (datetime.datetime.now() + datetime.timedelta(minutes=5)).timestamp()
+    }
 
     try:
         send_mail(
@@ -96,6 +109,11 @@ def verificar_registro_2fa(request):
     session_data = request.session.get(temp_token)
     if not session_data:
         return JsonResponse({'error': 'Sesión 2FA inválida'}, status=400)
+
+    # Verificar expiración (5 minutos)
+    if datetime.datetime.now().timestamp() > session_data.get('expira', 0):
+        del request.session[temp_token]
+        return JsonResponse({'error': 'Código expirado. Solicita uno nuevo'}, status=400)
 
     # Verificar código
     if session_data['codigo'] != str(codigo):
@@ -152,6 +170,7 @@ def login_user(request):
             'email': usuario.email,
             'codigo': codigo,
             'intentos': 0,
+            'expira': (datetime.datetime.now() + datetime.timedelta(minutes=5)).timestamp()
         }
 
         try:
@@ -201,6 +220,11 @@ def verificar_login_2fa(request):
     session_data = request.session.get(temp_token)
     if not session_data:
         return JsonResponse({'error': 'Sesión 2FA inválida'}, status=400)
+
+    # Verificar expiración (5 minutos)
+    if datetime.datetime.now().timestamp() > session_data.get('expira', 0):
+        del request.session[temp_token]
+        return JsonResponse({'error': 'Código expirado. Solicita uno nuevo'}, status=400)
 
     # Verificar código
     if session_data['codigo'] != str(codigo):
@@ -255,16 +279,12 @@ def google_login(request):
         usuario, created = Usuario.objects.get_or_create(
             email=email,
             defaults={
-                'username': email.split('@')[0],
+                'username': email.split('@')[0] + '_' + str(uuid.uuid4())[:8],  # Evitar duplicados
                 'first_name': name.split(' ')[0] if name else '',
                 'last_name': name.split(' ')[1] if len(name.split(' ')) > 1 else '',
                 'verificado': True,  # Google ya verifica el email
             }
         )
-
-        if created:
-            usuario.username = email.split('@')[0]
-            usuario.save()
 
         return JsonResponse({
             'ok': True,
@@ -302,7 +322,8 @@ def recuperar_contrasena(request):
     if usuario.pregunta_secreta != pregunta_secreta:
         return JsonResponse({'error': 'Pregunta secreta incorrecta'}, status=400)
 
-    if not usuario.check_password(respuesta_secreta):
+    # Corregido: comparar respuesta secreta directamente (no está hasheada)
+    if usuario.respuesta_secreta != respuesta_secreta:
         return JsonResponse({'error': 'Respuesta secreta incorrecta'}, status=400)
 
     # Generar token temporal
