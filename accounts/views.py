@@ -8,9 +8,13 @@ from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.middleware.csrf import get_token
+from django.db import transaction
 import json
 import datetime
 from django.contrib.auth.hashers import check_password
+import logging
+
+logger = logging.getLogger(__name__)
 Usuario = get_user_model()
 
 def generar_codigo():
@@ -38,41 +42,27 @@ def register_user(request):
               'correo', 'contrasena', 'telefono', 'preguntasecreta', 'respuestasecreta']
     for c in campos:
         if not data.get(c):
+            logger.warning(f"Campo {c} faltante en registro")
             return JsonResponse({'error': f'El campo {c} es obligatorio'}, status=400)
 
     # Verificar unicidad
     if Usuario.objects.filter(username=data['username']).exists():
+        logger.info(f"Intento de registro con username duplicado: {data['username']}")
         return JsonResponse({'error': 'El nombre de usuario ya está en uso'}, status=400)
     if Usuario.objects.filter(email=data['correo']).exists():
+        logger.info(f"Intento de registro con correo duplicado: {data['correo']}")
         return JsonResponse({'error': 'El correo ya está registrado'}, status=400)
     if Usuario.objects.filter(telefono=data['telefono']).exists():
+        logger.info(f"Intento de registro con teléfono duplicado: {data['telefono']}")
         return JsonResponse({'error': 'El teléfono ya está registrado'}, status=400)
 
-    # Crear usuario
-    usuario = Usuario(
-        username=data['username'],
-        email=data['correo'],
-        first_name=data['nombre'],
-        last_name=data['apellidopaterno'],
-        telefono=data['telefono'],
-        pregunta_secreta=data['preguntasecreta'],
-        respuesta_secreta=data['respuestasecreta'],
-        verificado=False,
-    )
-    usuario.set_password(data['contrasena'])
-    usuario.save()
-
-    # Generar y enviar código 2FA
+    # Generar código 2FA ANTES de crear el usuario
     codigo = generar_codigo()
     temp_token = str(uuid.uuid4())
-    request.session[temp_token] = {
-        'email': data['correo'],
-        'codigo': codigo,
-        'intentos': 0,
-        'expira': (datetime.datetime.now() + datetime.timedelta(minutes=5)).timestamp()
-    }
 
+    # Probar envío de email PRIMERO (antes de guardar el usuario)
     try:
+        logger.info(f"Intentando enviar email a {data['correo']}")
         send_mail(
             'Código de verificación',
             f'Tu código es: {codigo}. Expira en 5 minutos.',
@@ -80,8 +70,40 @@ def register_user(request):
             [data['correo']],
             fail_silently=False,
         )
+        logger.info(f"Email enviado exitosamente a {data['correo']}")
     except Exception as e:
-        return JsonResponse({'error': 'No se pudo enviar el correo'}, status=500)
+        logger.error(f"Error al enviar email a {data['correo']}: {type(e).__name__} - {str(e)}")
+        return JsonResponse({
+            'error': f'No se pudo enviar el correo de verificación: {str(e)}'
+        }, status=500)
+
+    # Si el email se envió correctamente, AHORA SÍ crear el usuario
+    try:
+        with transaction.atomic():
+            usuario = Usuario(
+                username=data['username'],
+                email=data['correo'],
+                first_name=data['nombre'],
+                last_name=data['apellidopaterno'],
+                telefono=data['telefono'],
+                pregunta_secreta=data['preguntasecreta'],
+                respuesta_secreta=data['respuestasecreta'],
+                verificado=False,
+            )
+            usuario.set_password(data['contrasena'])
+            usuario.save()
+            logger.info(f"Usuario creado exitosamente: {data['correo']}")
+    except Exception as e:
+        logger.error(f"Error al crear usuario: {type(e).__name__} - {str(e)}")
+        return JsonResponse({'error': 'Error al crear el usuario'}, status=500)
+
+    # Guardar en sesión
+    request.session[temp_token] = {
+        'email': data['correo'],
+        'codigo': codigo,
+        'intentos': 0,
+        'expira': (datetime.datetime.now() + datetime.timedelta(minutes=5)).timestamp()
+    }
 
     return JsonResponse({
         'mensaje': 'Usuario registrado con éxito',
@@ -174,6 +196,7 @@ def login_user(request):
         }
 
         try:
+            logger.info(f"Enviando código 2FA de login a {usuario.email}")
             send_mail(
                 'Código de verificación',
                 f'Tu código es: {codigo}. Expira en 5 minutos.',
@@ -181,8 +204,10 @@ def login_user(request):
                 [usuario.email],
                 fail_silently=False,
             )
-        except Exception:
-            return JsonResponse({'error': 'No se pudo enviar el correo'}, status=500)
+            logger.info(f"Código 2FA enviado exitosamente a {usuario.email}")
+        except Exception as e:
+            logger.error(f"Error al enviar código 2FA a {usuario.email}: {type(e).__name__} - {str(e)}")
+            return JsonResponse({'error': f'No se pudo enviar el correo: {str(e)}'}, status=500)
 
         return JsonResponse({
             'requires2fa': True,
